@@ -38,10 +38,10 @@ export class OpenAI {
 
     public chat = async(
         messages: OpenAIMessage[],
-        is_stream: boolean = true
+        is_stream = true
     ) => {
         try {
-            const url: string = `${this.address}/v1/chat/completions`;
+            const url = `${this.address}/v1/chat/completions`;
             const response = await fetch(`${url}`, {
                 method: 'POST',
                 headers: { 
@@ -62,6 +62,27 @@ export class OpenAI {
             const data = await response.json();
             if (response.ok) {
                 return data.choices[0].message.content;
+            } else {
+                throw new Error(data.message);
+            }
+        } catch (err: any) {
+            throw new Error(err.message);
+        }
+    }
+
+    public getModels = async() => {
+        try {
+            const url = `${this.address}/v1/models`;
+            const response = await fetch(`${url}`, {
+                method: 'GET',
+                headers: { 
+                    'Authorization': `Bearer ${this.apiKey}`
+                }
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                return data.data.map((model: any) => model.id);
             } else {
                 throw new Error(data.message);
             }

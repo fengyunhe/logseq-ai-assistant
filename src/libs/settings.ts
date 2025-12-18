@@ -2,8 +2,27 @@ import { SettingSchemaDesc } from "@logseq/libs/dist/LSPlugin";
 import { lang } from './language';
 import prompts from '@/prompt/query.toml?raw';
 import toml from 'toml';
+import { OpenAI } from '../../libs/openai';
 
 export const settingsSchema = async() => {
+    let modelChoices = ["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4", "gpt-4-32k", "gpt-3.5-turbo-0613", "gpt-4-0613"];
+    
+    // Try to get models from API if API key and address are set
+    const openaiKey: string = logseq.settings?.["openaiKey"] || "";
+    const openaiAddress: string = logseq.settings?.["openaiAddress"] || "https://api.openai.com";
+    
+    if (openaiKey) {
+        try {
+            const openai = new OpenAI(openaiKey, openaiAddress, "gpt-3.5-turbo");
+            const models = await openai.getModels();
+            // Filter only chat models
+            modelChoices = models;
+        } catch (err) {
+            console.error("Failed to fetch models from OpenAI API:", err);
+            // Use default models if API call fails
+        }
+    }
+    
     return [
         {
             key: "openaiKey",
@@ -24,7 +43,7 @@ export const settingsSchema = async() => {
             type: "enum",
             default: "gpt-3.5-turbo",
             title: "ChatGPT Models",
-            enumChoices: ["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4", "gpt-4-32k", "gpt-3.5-turbo-0613", "gpt-4-0613"],
+            enumChoices: modelChoices,
             description: (await lang()).message('GPTModel-description'),
         },
         {
