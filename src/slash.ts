@@ -8,14 +8,15 @@ export async function slash () {
             let { uuid }: any = await logseq.Editor.getCurrentBlock();
             let content = await api.summary(uuid, true);
             content += '\nPlease try to summarize the content of the above text.'
-            await api.openaiStream(content, uuid);
-    });
-
-    await logseq.Editor.registerSlashCommand('gpt',
-        async() => {
-            let { content, uuid }: any = await logseq.Editor.getCurrentBlock();
             await api.openaiStream(uuid, content);
     });
+
+    const gptAction = async () => {
+        let { content, uuid }: any = await logseq.Editor.getCurrentBlock();
+        await api.openaiStream(uuid, content);
+    };
+
+    await logseq.Editor.registerSlashCommand('gpt', gptAction);
 
     await logseq.Editor.registerSlashCommand('aihey', 
         async () => {

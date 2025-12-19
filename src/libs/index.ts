@@ -21,6 +21,19 @@ async function summary(uuid: string, isRecord: boolean): Promise<string> {
     return content;
 }
 
+// 过滤思考内容标签
+const filterThinkingContent = (content: string): string => {
+    // 处理完整的 <thinking></thinking> 标签
+    let filtered = content.replace(/<thinking>.*?<\/thinking>/gs, '');
+    // 处理完整的 <think></think> 标签
+    filtered = filtered.replace(/<think>.*?<\/think>/gs, '');
+    // // 处理单独的 </thinking> 或 </think> 结束标签
+    // filtered = filtered.replace(/<\/thinking>/g, '').replace(/<\/think>/g, '');
+    // // 处理单独的 <thinking> 或 <think> 开始标签
+    // filtered = filtered.replace(/<thinking>/g, '').replace(/<think>/g, '');
+    return filtered.trim();
+};
+
 async function openaiMessage(
     block_id: string,
     user_content: string,
@@ -30,7 +43,7 @@ async function openaiMessage(
     }
 ): Promise<void> {
     try {
-        const { openaiKey, openaiAddress, gptModel } = await getSettings();
+        const { openaiKey, openaiAddress, gptModel, isHideThinking } = await getSettings();
         const openai: OpenAI = new OpenAI(openaiKey, openaiAddress, gptModel);
         const uuid: string|undefined = (await logseq.Editor.insertBlock(block_id, `loading...`))?.uuid;
 
@@ -40,10 +53,13 @@ async function openaiMessage(
             assistant: opts?.assistant_content
         }), false);
 
+        // 如果隐藏思考过程，过滤掉思考内容标签
+        const processedResult = isHideThinking ? filterThinkingContent(result) : result;
+
         if (uuid) {
-            await logseq.Editor.updateBlock(uuid, result);
+            await logseq.Editor.updateBlock(uuid, processedResult);
         } else {
-            await logseq.Editor.insertBlock(block_id, result);
+            await logseq.Editor.insertBlock(block_id, processedResult);
         }
         await logseq.Editor.editBlock(block_id);
     } catch (err: any) {
@@ -66,36 +82,55 @@ async function openaiStream(
     }
 ): Promise<void> {
     try {
-        const { openaiKey, openaiAddress, gptModel } = await getSettings();
+        const { openaiKey, openaiAddress, gptModel, isHideThinking } = await getSettings();
         const openai: OpenAI = new OpenAI(openaiKey, openaiAddress, gptModel);
         const uuid: string|undefined = (await logseq.Editor.insertBlock(block_id, `loading...`))?.uuid;
 
-        let result: string = "", text: string = "";
-        const decoder = new TextDecoder("utf-8");
-        const reader = (await openai.chat(toMessages(
-            user_content, {
-            system: opts?.system_content,
-            assistant: opts?.assistant_content
-        }))).body?.getReader();
+        // If hide thinking is enabled, use non-streaming mode
+        if (isHideThinking) {
+            const result = await openai.chat(toMessages(
+                user_content, {
+                system: opts?.system_content,
+                assistant: opts?.assistant_content
+            }), false);
 
-        while (undefined !== uuid) {
-            const { done, value }: any = await reader?.read();
-            if( done ) { break; }
+            // 过滤思考内容标签
+            const processedResult = filterThinkingContent(result);
 
-            try {
-                const lines = decoder.decode(value).split("\n");
-                lines.map((line) => line.replace(/^data: /, "").trim())
-                    .filter((line) => line !== "" && line !== "[DONE]")
-                    .map((line) => JSON.parse(line))
-                    .forEach((line) => {
-                        text = line.choices[0].delta?.content as string;
-                        result += text ? text : '';
-                    })
-                await logseq.Editor.updateBlock(uuid, result);
-            } catch(err: any) {
-                // Avoid situations where the presence of 
-                // certain escape characters causes output failure.
-                continue;
+            if (uuid) {
+                await logseq.Editor.updateBlock(uuid, processedResult);
+            } else {
+                await logseq.Editor.insertBlock(block_id, processedResult);
+            }
+        } else {
+            // Original streaming mode
+            let result: string = "", text: string = "";
+            const decoder = new TextDecoder("utf-8");
+            const reader = (await openai.chat(toMessages(
+                user_content, {
+                system: opts?.system_content,
+                assistant: opts?.assistant_content
+            }))).body?.getReader();
+
+            while (undefined !== uuid) {
+                const { done, value }: any = await reader?.read();
+                if( done ) { break; }
+
+                try {
+                    const lines = decoder.decode(value).split("\n");
+                    lines.map((line) => line.replace(/^data: /, "").trim())
+                        .filter((line) => line !== "" && line !== "[DONE]")
+                        .map((line) => JSON.parse(line))
+                        .forEach((line) => {
+                            text = line.choices[0].delta?.content as string;
+                            result += text ? text : '';
+                        })
+                    await logseq.Editor.updateBlock(uuid, result);
+                } catch(err: any) {
+                    // Avoid situations where the presence of 
+                    // certain escape characters causes output failure.
+                    continue;
+                }
             }
         }
         await logseq.Editor.editBlock(block_id);
@@ -106,7 +141,7 @@ async function openaiStream(
 
 async function generateAdvancedQuery(content: string, block_id: string) {
     try {
-        const { openaiKey, openaiAddress, gptModel, promptAdvancedQuery } = await getSettings();
+        const { openaiKey, openaiAddress, gptModel, promptAdvancedQuery, isHideThinking } = await getSettings();
         const openai: OpenAI = new OpenAI(openaiKey, openaiAddress, gptModel);
         const uuid: string|undefined = (await logseq.Editor.insertBlock(block_id, `loading...`))?.uuid;
 
@@ -116,7 +151,10 @@ async function generateAdvancedQuery(content: string, block_id: string) {
                 system: promptAdvancedQuery
             }), false));
 
-            await logseq.Editor.updateBlock(uuid, result.replace(/^```+|```+$/g, ''));
+            // 如果隐藏思考过程，过滤掉思考内容标签
+            const processedResult = isHideThinking ? filterThinkingContent(result) : result;
+
+            await logseq.Editor.updateBlock(uuid, processedResult.replace(/^```+|```+$/g, ''));
             await logseq.Editor.editBlock(block_id);
         }
     } catch (err: any) {

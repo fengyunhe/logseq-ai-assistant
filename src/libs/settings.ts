@@ -63,6 +63,13 @@ export const settingsSchema = async() => {
             default: false,
             title: "Text Query",
             description: (await lang()).message('isTextQuery-description'),
+        },
+        {
+            key: "isHideThinking",
+            type: "boolean",
+            default: false,
+            title: "Hide Thinking Process",
+            description: (await lang()).message('isHideThinking-description'),
         }
         // {
         //     key: "generateAdvancedQuery",
@@ -99,6 +106,7 @@ export const getSettings = async() => {
         gptModel,
         promptAdvancedQuery,
         isTextQuery,
-        isStreamingOutput: logseq.settings!["isStreamingOutput"] as boolean
+        isStreamingOutput: logseq.settings!["isStreamingOutput"] as boolean,
+        isHideThinking: logseq.settings!["isHideThinking"] as boolean
     };
 }
